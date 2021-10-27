@@ -2,6 +2,7 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras import Model
 import tensorflow as tf
 from spektral.layers import GATConv, GCNConv, GraphSageConv
+import numpy as np
 
 class GAT(Model):
     def __init__(self, nhid, nclass, dropout):
@@ -65,9 +66,52 @@ class RNNGCN(Model):
 class RNNGNNLayer(tf.keras.layers.Layer):
     def __init__(self):
         super(RNNGNNLayer, self).__init__()
-        
+
         self.lam = tf.Variable(initial_value=0.2, trainable=True, name="lam", dtype=tf.float32)
 
     def call(self, adj):
-        #0*self.lam is just there so lam is technically included in the first iteration so the warnings shut up
-        return 0*self.lam + tf.foldl(lambda prev_adj, next_adj: (1-self.lam)*prev_adj+self.lam*next_adj, adj)
+        self.lam.assign(tf.clip_by_value(self.lam, 0, 1))
+        return tf.foldl(lambda prev_adj, next_adj: (1-self.lam)*prev_adj+self.lam*next_adj, adj)
+
+class TRNNGCN(Model):
+    def __init__(self, nnode, nhid, nclass, dropout):
+        super(TRNNGCN, self).__init__()
+
+        self.updated_adj = TRNNGNNLayer(nclass, nnode)
+        self.dropout = Dropout(dropout)
+        self.gcn1 = GCNConv(channels=nhid, activation='relu')
+        self.gcn2 = GCNConv(channels=nclass, activation='softmax')
+
+    def call(self, inputs, training=None):
+        feats, adj = inputs
+
+        adj = self.updated_adj(adj)
+        x_1 = self.gcn1([feats[:,-1,:], adj])
+        dropout = self.dropout(x_1, training=training)
+        output = self.gcn2([dropout, adj])
+
+        amax = tf.math.argmax(output, axis=1)
+
+        self.updated_adj.h.assign(tf.zeros(self.updated_adj.h.shape))
+        self.updated_adj.h.scatter_nd_add(tf.stack([range(feats.shape[0]), amax], axis=1), tf.fill([feats.shape[0]], 1.0))
+
+        return output
+
+class TRNNGNNLayer(tf.keras.layers.Layer):
+    def __init__(self, nclass, nnode):
+        super(TRNNGNNLayer, self).__init__()
+
+        self.lam = tf.Variable(tf.fill([nclass, nclass], 0.5), trainable=True, name="lam", dtype=tf.float32)
+
+        self.h = tf.Variable(tf.zeros([nnode, nclass]), trainable=False, dtype=tf.float32)
+        self.h.scatter_nd_add(tf.stack([range(nnode), tf.random.uniform([nnode], 0, nclass, dtype=tf.int32, seed=5)], axis=1), tf.fill([nnode], 1.0))
+
+
+    def call(self, adj):
+        #Set boundary conditions
+        self.lam.assign(tf.clip_by_value(self.lam, 0, 1))
+        lam_temp = tf.matmul(tf.matmul(self.h, self.lam), tf.transpose(self.h))
+
+        adj = tf.foldl(lambda prev_adj, next_adj: (1-lam_temp)*prev_adj+lam_temp*next_adj, adj)
+
+        return adj
