@@ -115,3 +115,24 @@ class TRNNGNNLayer(tf.keras.layers.Layer):
         adj = tf.foldl(lambda prev_adj, next_adj: (1-lam_temp)*prev_adj+lam_temp*next_adj, adj)
 
         return adj
+
+class GCNLSTM(Model):
+    def __init__(self, nhid, nclass, dropout):
+        super(GCNLSTM, self).__init__()
+
+        self.dropout = Dropout(dropout)
+        self.gcn1 = GCNConv(channels=nhid, activation='relu')
+        self.gcn2 = GCNConv(channels=nclass)
+        self.lstm = tf.keras.layers.LSTM(units=nclass, dropout=0.5)
+
+    def call(self, inputs, training=None):
+        feats, adj = inputs
+
+        out = []
+
+        for i in range(adj.shape[0]):
+            x_1 = self.gcn1([feats[:,-1,:], adj[i,:,:]])
+            dropout = self.dropout(x_1, training=training)
+            out.append(self.gcn2([dropout, adj[i,:,:]]))
+        out = tf.stack(out, 1)
+        return tf.keras.activations.softmax(self.lstm(out))
