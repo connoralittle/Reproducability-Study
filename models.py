@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import Dropout, Dense
 from tensorflow.keras import Model
 import tensorflow as tf
 from spektral.layers import GATConv, GCNConv, GraphSageConv
@@ -136,3 +136,29 @@ class GCNLSTM(Model):
             out.append(self.gcn2([dropout, adj[i,:,:]]))
         out = tf.stack(out, 1)
         return tf.keras.activations.softmax(self.lstm(out))
+
+class EGCN(Model): #egcn_o
+    def __init__(self, nfeat, nhid, nclass, skipfeats=False):
+        super().__init__()
+
+        self.skipfeats = skipfeats
+        self.GRU_layers = []
+        self.mlp = tf.keras.Sequential(Dense(units = nhid, activation="relu"),
+                                       Dense(units = nclass))
+        
+        self.GRU_layers.append(tf.keras.layers.GRU(units=nhid, activation='relu'))
+        self.GRU_layers.append(tf.keras.layers.GRU(units=nhid, activation='relu'))
+
+    def call(self,inputs):
+        feats, adj = inputs
+
+        node_feats= feats[:,-1,:]
+        for unit in self.GRU_layers:
+            feats = unit(adj,feats)
+
+        out = Nodes_list[:,-1,:]
+        if self.skipfeats:
+            out = tf.concat((out,node_feats), dim=1)  
+       
+        
+        return tf.nn.softmax(self.mlp(out), dim=1)
