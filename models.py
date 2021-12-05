@@ -4,6 +4,7 @@ import tensorflow as tf
 from spektral.layers import GATConv, GCNConv, GraphSageConv
 import numpy as np
 
+#This file contains all of the models created in tensorflow
 class GAT(Model):
     def __init__(self, nhid, nclass, dropout):
         super(GAT, self).__init__()
