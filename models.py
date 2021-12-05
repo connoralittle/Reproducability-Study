@@ -5,16 +5,20 @@ from spektral.layers import GATConv, GCNConv, GraphSageConv
 import numpy as np
 
 #This file contains all of the models created in tensorflow
+#most models follow the same format so I'll comment GAT and just focus on unique aspects of others
 class GAT(Model):
     def __init__(self, nhid, nclass, dropout):
         super(GAT, self).__init__()
 
+        #there are 3 main components: a dropout layer and 2 convolutional layers
         self.dropout = Dropout(dropout)
         self.gat1 = GATConv(channels=nhid,attn_heads=1,concat_heads=True, activation='relu')
         self.gat2 = GATConv(channels=nclass,attn_heads=1,concat_heads=True, activation='softmax')
 
     def call(self, inputs, training=None):
+        #all models take in a feature and adjacency matrix as input
         feats, adj = inputs
+        #convolution -> dropout -> convolution
         x_1 = self.gat1([feats, adj])
         dropout = self.dropout(x_1, training=training)
         return self.gat2([dropout, adj])
@@ -68,10 +72,14 @@ class RNNGNNLayer(tf.keras.layers.Layer):
     def __init__(self):
         super(RNNGNNLayer, self).__init__()
 
+        #decay rate variable
         self.lam = tf.Variable(initial_value=0.2, trainable=True, name="lam", dtype=tf.float32)
 
     def call(self, adj):
+
         self.lam.assign(tf.clip_by_value(self.lam, 0, 1))
+        #multiply the adjacency matrices with the decay rate over time
+        #returns an adjacency matrix
         return tf.foldl(lambda prev_adj, next_adj: (1-self.lam)*prev_adj+self.lam*next_adj, adj)
 
 class TRNNGCN(Model):
@@ -102,6 +110,7 @@ class TRNNGNNLayer(tf.keras.layers.Layer):
     def __init__(self, nclass, nnode):
         super(TRNNGNNLayer, self).__init__()
 
+        #decay matrix
         self.lam = tf.Variable(tf.fill([nclass, nclass], 0.5), trainable=True, name="lam", dtype=tf.float32)
 
         self.h = tf.Variable(tf.zeros([nnode, nclass]), trainable=False, dtype=tf.float32)
@@ -113,9 +122,9 @@ class TRNNGNNLayer(tf.keras.layers.Layer):
         self.lam.assign(tf.clip_by_value(self.lam, 0, 1))
         lam_temp = tf.matmul(tf.matmul(self.h, self.lam), tf.transpose(self.h))
 
-        adj = tf.foldl(lambda prev_adj, next_adj: (1-lam_temp)*prev_adj+lam_temp*next_adj, adj)
-
-        return adj
+        #multiply the adjacency matrices with the decay rate over time
+        #returns an adjacency matrix
+        return tf.foldl(lambda prev_adj, next_adj: (1-lam_temp)*prev_adj+lam_temp*next_adj, adj)
 
 class GCNLSTM(Model):
     def __init__(self, nhid, nclass, dropout):
@@ -131,6 +140,7 @@ class GCNLSTM(Model):
 
         out = []
 
+        #lstm loops through the inputs
         for i in range(adj.shape[0]):
             x_1 = self.gcn1([feats[:,-1,:], adj[i,:,:]])
             dropout = self.dropout(x_1, training=training)
@@ -138,6 +148,7 @@ class GCNLSTM(Model):
         out = tf.stack(out, 1)
         return tf.keras.activations.softmax(self.lstm(out))
 
+#unused
 class EGCN(Model): #egcn_o
     def __init__(self, nfeat, nhid, nclass, skipfeats=False):
         super().__init__()
