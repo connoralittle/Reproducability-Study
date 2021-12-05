@@ -51,6 +51,7 @@ class GraphSage(Model):
         dropout = self.dropout(x_1, training=training)
         return self.gs2([dropout, tf.sparse.from_dense(adj)])
 
+#Recurrent neural network graph convolutional network
 class RNNGCN(Model):
     def __init__(self, nhid, nclass, dropout):
         super(RNNGCN, self).__init__()
@@ -82,6 +83,8 @@ class RNNGNNLayer(tf.keras.layers.Layer):
         #returns an adjacency matrix
         return tf.foldl(lambda prev_adj, next_adj: (1-self.lam)*prev_adj+self.lam*next_adj, adj)
 
+
+#Transitional recurrent neural network graph convolutional network
 class TRNNGCN(Model):
     def __init__(self, nnode, nhid, nclass, dropout):
         super(TRNNGCN, self).__init__()
